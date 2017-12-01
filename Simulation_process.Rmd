@@ -1,0 +1,106 @@
+---
+title: "Absorbed radiance and leaf to air temperature difference simulation"
+author: "Wen Lin"
+date: "June 21, 2017"
+output: word_document
+---
+# Contents
+
+1. simulate absorbed radiance
+2. simulate leaf-to-air temperature difference 
+
+## 1. Simulation of absorbed radiance 
+```{r setup}
+tao <- 0.7 # atmopheric transmittance. the values are between 0.6 and 0.7 for clear conditions
+phi <- 5/180*pi   # sun zenith angle (5 degrees)
+m <- exp(-625*0.3048/8200)/cos(phi) # optical air mass number 
+Sp <- 1360*tao^m        # direct radiation
+Sd <- 0.3*(1-tao^m)*1360*cos(phi)   # diffuse radiation 
+Fp <- cos(phi)/2 # view factor for direct radiation
+St <- Fp*Sp+Sd  # global irradiance for calculating reflected radiation 
+albedo <- 0.1 # evergreen conifer conifer albedo: 0.08-0.11. 
+Sr <- albedo*St  # reflected radiation 
+
+alpha_s <- 0.88 # conifer absorptivity for solar wavebands, value is from Martin's paper
+alpha_l <- 0.96 # conifer absorptivity for thermal wavebands, value is from Martin's paper
+
+T_a <- 35 # air temperature
+B <- 5.67E-8 * (T_a+273.15)^4# black body emittance 
+
+e_c <- 9.2E-6*(T_a+273.15)^2  # clear sky emissivity
+
+# F: view factors
+Fd <- Fr <- Fa <- Fg <- 0.5
+
+La <- e_c* B # long wave flux density from the atmophere
+Lg <- La # long wave flux density from the ground, assuming ground temperature is equal to air temperature
+
+# absorbed radiance
+R_abs <- alpha_s*(Fp*Sp+Fd*Sd+Fr*Sr)+alpha_l*(Fa*La+Fg*Lg);
+R_abs <- round(R_abs,0)
+paste0("Absorbed radiance at minimal sun zenith angle = ",R_abs," W/m2")
+```
+
+## 2. Simulation of leaf-to-air temperature difference
+```{r}
+# global variable: wind speed (u)
+u <- seq(0.1,5,l=100)
+
+# function to calculate saturated vapor pressure
+vp3 <- function(Tmpt) # unite: kpa formula source: Campbell&Norman Env. biophysics
+{return(0.611*exp((17.502*Tmpt)/(Tmpt+240.97)))}
+
+# the slope of the saturation vapor pressure function
+Delta.fun <- function(x)
+{return(17.502*240.47*vp3(x)/(240.97+x)^2)}
+
+# function to simulate leaf to air temperature difference
+leaf.T.R <- function(R_abs)
+{
+  g_vs <- 0.067 # stomatal conductance
+  RH <- 0.50 # RH: relative humidity
+  T_a <- 35 # T_a: air temperature
+  width <- 1.5E-3 # leaf diameter: 1.5mm
+  
+  gamma <- 6.66E-4 # thermodynamic psychrometer constant
+  # calculate the atmospheric pressure of the site with elevation as 191m
+  p_a <- 101.3*exp(-191/8200)
+  c_p <- 29.3 # specific heat of air at constant pressure, unit J/mol/K
+  
+  B <- 5.67E-8 * (T_a+273.15)^4
+  # g_r: radiative conductance at air temperature, simulated using a polynomial function
+  g_r <- 7E-6*(T_a+273.15)^2-0.0021*(T_a+273.15)+0.2085;g_r 
+  
+  e_s <- vp3(T_a); # e_s: saturated vapor pressure at air temperature = 35C
+  Delta <- Delta.fun(T_a) # Delta: slope of vapor pressure function at air temperature = 35C
+  s <- Delta/p_a;s # s: slope of saturation mole fraction function
+  D <- e_s*(1-RH) # D: VPD
+  R_ni <- R_abs - B*0.97
+  
+  d <- 0.7*width # d: leaf characteristic dimension
+  # g_Ha: boundary layer conductance for heat, 1.4 is used for outdoor conditions
+  g_Ha <- 1.4*0.135*sqrt(u/d)
+  # g_va: boundary layer conductance for vapor, 1.4 is used for outdoor conditions
+  g_va <- 1.4*0.147*sqrt(u/d)
+  g_Hr <- g_Ha+g_r # g_Hr: sum of boundary layer and radiative conductances
+  g_v <- (g_vs*g_va)/(g_vs+g_va);g_v # assume abaxial and adaxial conductance to be the same
+  gamma_star <- gamma *g_Hr/g_v;gamma_star # gamma_star: apparent psychrometer constant
+  #T_d: the air to leaf temperature difference 
+  T_d <- gamma_star/(gamma_star+s)*(R_ni/(g_Hr*c_p)-D/p_a/gamma_star)
+  return(T_d)
+}
+
+dat <- data.frame(T1=leaf.T.R(0),T2=leaf.T.R(300), T3=leaf.T.R(600), T4=leaf.T.R(928))
+par(mar=c(4.5,5,1,1))
+matplot(u,dat,type="l",col=rainbow(4),lty=1,
+        ylab=expression(T[l]~"-"~T[a]~"("~degree*C~")"),xlab="Wind speed (m/s)")
+abline(h=0,col=8,lty=3)
+text(0.5,4,pos=4,expression(T[a]*"=35"*degree*C*", RH=50%, "*g[s]*"=67mmol"~m^{-2}~s^{-1}),cex=0.8)
+legend("bottomright",expression(R[abs]*"= 0 W"~m^{-2},R[abs]*"= 300 W"~m^{-2},R[abs]*"= 600 W"~m^{-2},R[abs]*"= 928 W"~m^{-2}),lty=1,col=rainbow(4),cex=0.8,ncol=2)
+```
+$$ g_{Hr}= g_{Ha}+g_r$$
+$$ g_{Ha}=1.4*0.135*\sqrt{\frac{u}{d}}$$
+Where u represents wind speed, and d represents leaf characteristic dimension. 1.4 is used because of outdoor conditions. 
+$$ d=0.7*leaf diameter $$
+
+$ g_r $ is obtained from a table from Appendex. The table shows that $ g_r $ is a function of temperature. Thus I used a polynomial function to simulate $ g_r $ using temperature. 
