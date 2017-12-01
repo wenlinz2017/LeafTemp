@@ -1,3 +1,11 @@
+vp3 <- function(Tmpt) #a function to estimate VPD unite: kpa source: Campbell&Norman Env. biophysics
+{return(0.611*exp((17.502*Tmpt)/(Tmpt+240.97)))}
+
+# a function to estimate the slope of the saturation vapor pressure function
+Delta.fun <- function(x)
+{return(17.502*240.47*vp3(x)/(240.97+x)^2)}
+
+
 leaf.T <- function(R_ni,g_vs) # a function to estimate leaf temperature
 {
 T_a <- 30
@@ -8,12 +16,11 @@ gamma <- 6.66E-4 #thermodynamic psychrometer constant
 p_a <- 101.3
 c_p <- 29.3 # specific heat of air at constant pressure, J/mol/K
 
-#g_r <- 0.216 radiative conductance at air temperature = 30C
-g_r <- 7E-6*(T_a+273.15)^2-0.0021*(T_a+273.15)+0.2085;g_r 
+g_r <- 7E-6*(T_a+273.15)^2-0.0021*(T_a+273.15)+0.2085;g_r # radiative conductance
 
-e_s <- vp3(T_a);e_s # saturated vapor pressure at air temperature = 30C
-#Delta <- 0.244
-Delta <- Delta.fun(T_a);Delta # slope of vapor pressure function at air temperature = 30C
+e_s <- vp3(T_a);e_s # saturated vapor pressure 
+
+Delta <- Delta.fun(T_a);Delta # slope of vapor pressure function
 s <- Delta/p_a # slope of saturation mole fraction function
 D <- e_s*(1-RH);D
 
